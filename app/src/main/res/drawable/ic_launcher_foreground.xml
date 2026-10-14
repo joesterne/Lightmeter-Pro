@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Lightmeter Outer Bezel -->
+    <path
+        android:fillColor="#1E293B"
+        android:strokeColor="#F59E0B"
+        android:strokeWidth="2.5"
+        android:pathData="M34,26 C34,23 37,20 40,20 L68,20 C71,20 74,23 74,26 L74,82 C74,85 71,88 68,88 L40,88 C37,88 34,85 34,82 Z" />
+
+    <!-- Luminous Spherical Dome (Incident Light Collector) -->
+    <path
+        android:fillColor="#F8FAFC"
+        android:pathData="M44,20 C44,14.5 48.5,10 54,10 C59.5,10 64,14.5 64,20 Z" />
+
+    <!-- Dome highlight -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M49,15 C49,12.5 51.5,10.5 54,10.5 C56.5,10.5 59,12.5 59,15 Z" />
+
+    <!-- Display Screen -->
+    <path
+        android:fillColor="#0B132B"
+        android:strokeColor="#334155"
+        android:strokeWidth="1.2"
+        android:pathData="M39,32 C39,30 41,28 43,28 L65,28 C67,28 69,30 69,32 L69,54 C69,56 67,58 65,58 L43,58 C41,58 39,56 39,54 Z" />
+
+    <!-- Digital EV / Aperture / Lux Readout lines -->
+    <!-- "EV" text badge & reading -->
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M42,34 L49,34 L49,36 L44,36 L44,38 L48,38 L48,40 L44,40 L44,43 L42,43 Z" />
+    <path
+        android:fillColor="#F59E0B"
+        android:pathData="M51,34 L53,34 L56,41 L59,34 L61,34 L57,43 L55,43 Z" />
+    <path
+        android:fillColor="#38BDF8"
+        android:pathData="M44,47 L64,47 L64,49 L44,49 Z" />
+
+    <!-- Dial markings below screen -->
+    <path
+        android:strokeColor="#94A3B8"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:pathData="M42,65 L45,65 M42,70 L47,70 M42,75 L45,75 M63,65 L66,65 M61,70 L66,70 M63,75 L66,75" />
+
+    <!-- Center Control Button / Measure Trigger -->
+    <path
+        android:fillColor="#F59E0B"
+        android:strokeColor="#D97706"
+        android:strokeWidth="1"
+        android:pathData="M 54,64 A 7,7 0 1 0 54,78 A 7,7 0 1 0 54,64 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 54,68 A 3,3 0 1 0 54,74 A 3,3 0 1 0 54,68 Z" />
+</vector>

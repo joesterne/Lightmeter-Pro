@@ -1,0 +1,6 @@
+{
+  "name": "Lightmeter Pro",
+  "description": "Professional light meter with live lux/EV metering, camera & lens database, photo analysis, multi-light ratio calculator, gear inventory, bluetooth shutter, and AI advisor.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
