@@ -12,6 +12,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import com.example.data.local.CameraBodyEntity
+import com.example.data.local.LensEntity
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -24,6 +26,8 @@ enum class SyncState {
 
 class LightmeterRepository(private val context: Context) {
     private val database = AppDatabase.getInstance(context)
+    private val cameraBodyDao = database.cameraBodyDao()
+    private val lensDao = database.lensDao()
     private val gearDao = database.gearDao()
     private val presetDao = database.presetDao()
     private val logDao = database.exposureLogDao()
@@ -37,12 +41,32 @@ class LightmeterRepository(private val context: Context) {
     init {
         // Pre-populate if empty
         CoroutineScope(Dispatchers.IO).launch {
+            if (cameraBodyDao.getCount() == 0) {
+                DefaultData.INITIAL_CAMERA_BODIES.forEach { cameraBodyDao.insertCameraBody(it) }
+            }
+            if (lensDao.getCount() == 0) {
+                DefaultData.INITIAL_LENSES.forEach { lensDao.insertLens(it) }
+            }
             if (presetDao.getCount() == 0) {
                 DefaultData.INITIAL_PRESETS.forEach { presetDao.insertPreset(it) }
                 DefaultData.INITIAL_GEAR.forEach { gearDao.insertGear(it) }
             }
         }
     }
+
+    // Camera Bodies
+    fun getAllCameraBodies(): Flow<List<CameraBodyEntity>> = cameraBodyDao.getAllCameraBodies()
+    suspend fun addCameraBody(camera: CameraBodyEntity) = cameraBodyDao.insertCameraBody(camera)
+    suspend fun updateCameraBody(camera: CameraBodyEntity) = cameraBodyDao.updateCameraBody(camera)
+    suspend fun deleteCameraBody(camera: CameraBodyEntity) = cameraBodyDao.deleteCameraBody(camera)
+    suspend fun toggleCameraBodyInBag(id: Long, inBag: Boolean) = cameraBodyDao.toggleInBag(id, inBag)
+
+    // Lenses
+    fun getAllLenses(): Flow<List<LensEntity>> = lensDao.getAllLenses()
+    suspend fun addLens(lens: LensEntity) = lensDao.insertLens(lens)
+    suspend fun updateLens(lens: LensEntity) = lensDao.updateLens(lens)
+    suspend fun deleteLens(lens: LensEntity) = lensDao.deleteLens(lens)
+    suspend fun toggleLensInBag(id: Long, inBag: Boolean) = lensDao.toggleInBag(id, inBag)
 
     // Presets
     fun getPresets(): Flow<List<PresetEntity>> = presetDao.getAllPresets()

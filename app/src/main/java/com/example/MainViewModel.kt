@@ -42,6 +42,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val isCameraViewfinderActive: StateFlow<Boolean> = _isCameraViewfinderActive.asStateFlow()
 
     // Flow from Room Database
+    val cameraBodies = repository.getAllCameraBodies()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val userLenses = repository.getAllLenses()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val presets = repository.getPresets()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -116,6 +122,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     )
     val studioSetup: StateFlow<MultiLightSetup> = _studioSetup.asStateFlow()
+
+    private val _portraitCalculation = MutableStateFlow(com.example.data.model.PortraitRatioCalculation())
+    val portraitCalculation: StateFlow<com.example.data.model.PortraitRatioCalculation> = _portraitCalculation.asStateFlow()
 
     // Gemini Photo Understanding State (gemini-4-argon)
     private val _uploadedPhoto = MutableStateFlow<Bitmap?>(null)
@@ -293,28 +302,37 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val nd = _ndFilterStops.value
         when (_priority.value) {
             ExposurePriority.APERTURE_PRIORITY -> {
-                _shutterSpeed.value = ExposureStandards.calculateShutterSpeed(
+                val newShutter = ExposureStandards.calculateShutterSpeed(
                     ev100 = ev100,
                     iso = _iso.value,
                     aperture = _aperture.value,
                     ndStops = nd
                 )
+                if (_shutterSpeed.value != newShutter) {
+                    _shutterSpeed.value = newShutter
+                }
             }
             ExposurePriority.SHUTTER_PRIORITY -> {
-                _aperture.value = ExposureStandards.calculateAperture(
+                val newAperture = ExposureStandards.calculateAperture(
                     ev100 = ev100,
                     iso = _iso.value,
                     shutterSpeed = _shutterSpeed.value,
                     ndStops = nd
                 )
+                if (kotlin.math.abs(_aperture.value - newAperture) > 0.05f) {
+                    _aperture.value = newAperture
+                }
             }
             ExposurePriority.ISO_PRIORITY -> {
-                _iso.value = ExposureStandards.calculateIso(
+                val newIso = ExposureStandards.calculateIso(
                     ev100 = ev100,
                     aperture = _aperture.value,
                     shutterSpeed = _shutterSpeed.value,
                     ndStops = nd
                 )
+                if (_iso.value != newIso) {
+                    _iso.value = newIso
+                }
             }
             ExposurePriority.MANUAL_LOCK -> {
                 // Keep manual values, user inspects histogram / balance
@@ -406,6 +424,112 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // Camera Bodies Management
+    fun addCameraBody(
+        brand: String,
+        modelName: String,
+        sensorFormat: String,
+        cropFactor: Float,
+        baseIso: Int,
+        maxIso: Int,
+        maxShutter: String,
+        hasIbis: Boolean,
+        serialNumber: String,
+        weightGrams: Int,
+        notes: String
+    ) {
+        viewModelScope.launch {
+            val camera = com.example.data.local.CameraBodyEntity(
+                brand = brand,
+                modelName = modelName,
+                sensorFormat = sensorFormat,
+                cropFactor = cropFactor,
+                baseIso = baseIso,
+                maxIso = maxIso,
+                maxShutterSpeed = maxShutter,
+                hasIbis = hasIbis,
+                serialNumber = serialNumber,
+                weightGrams = weightGrams,
+                inBag = true,
+                notes = notes
+            )
+            repository.addCameraBody(camera)
+            Toast.makeText(getApplication(), "Added Camera Body: $brand $modelName", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun deleteCameraBody(camera: com.example.data.local.CameraBodyEntity) {
+        viewModelScope.launch {
+            repository.deleteCameraBody(camera)
+        }
+    }
+
+    fun toggleCameraBodyInBag(camera: com.example.data.local.CameraBodyEntity) {
+        viewModelScope.launch {
+            repository.toggleCameraBodyInBag(camera.id, !camera.inBag)
+        }
+    }
+
+    fun mountCameraBodyOnMeter(camera: com.example.data.local.CameraBodyEntity) {
+        val model = camera.toCameraModel()
+        selectBrand(camera.brand)
+        selectCamera(model)
+        Toast.makeText(getApplication(), "Mounted ${camera.brand} ${camera.modelName} on Meter", Toast.LENGTH_SHORT).show()
+    }
+
+    // Lenses Management
+    fun addLens(
+        brand: String,
+        lensName: String,
+        minFocal: Int,
+        maxFocal: Int,
+        maxAperture: Float,
+        minAperture: Float,
+        hasOis: Boolean,
+        filterThreadMm: Int,
+        serialNumber: String,
+        weightGrams: Int,
+        notes: String
+    ) {
+        viewModelScope.launch {
+            val lens = com.example.data.local.LensEntity(
+                brand = brand,
+                lensName = lensName,
+                minFocalLength = minFocal,
+                maxFocalLength = maxFocal,
+                maxAperture = maxAperture,
+                minAperture = minAperture,
+                hasOis = hasOis,
+                filterThreadMm = filterThreadMm,
+                serialNumber = serialNumber,
+                weightGrams = weightGrams,
+                inBag = true,
+                notes = notes
+            )
+            repository.addLens(lens)
+            Toast.makeText(getApplication(), "Added Lens: $lensName", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun deleteLens(lens: com.example.data.local.LensEntity) {
+        viewModelScope.launch {
+            repository.deleteLens(lens)
+        }
+    }
+
+    fun toggleLensInBag(lens: com.example.data.local.LensEntity) {
+        viewModelScope.launch {
+            repository.toggleLensInBag(lens.id, !lens.inBag)
+        }
+    }
+
+    fun mountLensOnMeter(lens: com.example.data.local.LensEntity) {
+        val model = lens.toLensModel()
+        selectBrand(lens.brand)
+        selectLens(model)
+        Toast.makeText(getApplication(), "Mounted ${lens.lensName} on Meter", Toast.LENGTH_SHORT).show()
+    }
+
     // Multi-Light Studio
     fun updateStudioLightPower(lightId: String, powerFraction: Float) {
         val current = _studioSetup.value
@@ -429,6 +553,69 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             if (light.id == lightId) light.copy(distanceMeters = distanceM) else light
         }
         _studioSetup.value = current.copy(lights = updatedLights)
+    }
+
+    // Portrait Multi-Light Ratio Calculator
+    fun updatePortraitLightReading(role: com.example.data.model.LightRole, fStop: Float, tenths: Int) {
+        val current = _portraitCalculation.value
+        val updated = when (role) {
+            com.example.data.model.LightRole.KEY -> current.copy(keyLight = current.keyLight.copy(fStop = fStop, fractionalTenths = tenths.coerceIn(0, 9)))
+            com.example.data.model.LightRole.FILL -> current.copy(fillLight = current.fillLight.copy(fStop = fStop, fractionalTenths = tenths.coerceIn(0, 9)))
+            com.example.data.model.LightRole.RIM -> current.copy(hairLight = current.hairLight.copy(fStop = fStop, fractionalTenths = tenths.coerceIn(0, 9)))
+            com.example.data.model.LightRole.BACKGROUND -> current.copy(backgroundLight = (current.backgroundLight ?: com.example.data.model.LightReading(com.example.data.model.LightRole.BACKGROUND, "Background Light")).copy(fStop = fStop, fractionalTenths = tenths.coerceIn(0, 9)))
+        }
+        _portraitCalculation.value = updated
+    }
+
+    fun togglePortraitLightEnabled(role: com.example.data.model.LightRole) {
+        val current = _portraitCalculation.value
+        val updated = when (role) {
+            com.example.data.model.LightRole.KEY -> current.copy(keyLight = current.keyLight.copy(isEnabled = !current.keyLight.isEnabled))
+            com.example.data.model.LightRole.FILL -> current.copy(fillLight = current.fillLight.copy(isEnabled = !current.fillLight.isEnabled))
+            com.example.data.model.LightRole.RIM -> current.copy(hairLight = current.hairLight.copy(isEnabled = !current.hairLight.isEnabled))
+            com.example.data.model.LightRole.BACKGROUND -> {
+                val bg = current.backgroundLight ?: com.example.data.model.LightReading(com.example.data.model.LightRole.BACKGROUND, "Background Light")
+                current.copy(backgroundLight = bg.copy(isEnabled = !bg.isEnabled))
+            }
+        }
+        _portraitCalculation.value = updated
+    }
+
+    fun applyPortraitPreset(
+        keyF: Float,
+        fillF: Float,
+        fillTenths: Int,
+        hairF: Float,
+        hairTenths: Int,
+        bgF: Float,
+        bgEnabled: Boolean,
+        presetName: String
+    ) {
+        val current = _portraitCalculation.value
+        _portraitCalculation.value = current.copy(
+            keyLight = current.keyLight.copy(fStop = keyF, fractionalTenths = 0, isEnabled = true),
+            fillLight = current.fillLight.copy(fStop = fillF, fractionalTenths = fillTenths, isEnabled = true),
+            hairLight = current.hairLight.copy(fStop = hairF, fractionalTenths = hairTenths, isEnabled = true),
+            backgroundLight = (current.backgroundLight ?: com.example.data.model.LightReading(com.example.data.model.LightRole.BACKGROUND, "Background Light"))
+                .copy(fStop = bgF, fractionalTenths = 0, isEnabled = bgEnabled)
+        )
+        Toast.makeText(getApplication(), "Applied Lighting Preset: $presetName", Toast.LENGTH_SHORT).show()
+    }
+
+    fun importCurrentExposureToPortraitLight(role: com.example.data.model.LightRole) {
+        val currentAp = _aperture.value
+        val standardAps = ExposureStandards.STANDARD_APERTURES
+        val closestAp = standardAps.minByOrNull { kotlin.math.abs(it - currentAp) } ?: currentAp
+        updatePortraitLightReading(role, closestAp, 0)
+        Toast.makeText(getApplication(), "Imported f/$closestAp to ${role.title}", Toast.LENGTH_SHORT).show()
+    }
+
+    fun applyWorkingApertureToCamera() {
+        val workingF = _portraitCalculation.value.workingCameraAperture
+        _aperture.value = workingF
+        _priority.value = ExposurePriority.APERTURE_PRIORITY
+        recalculateExposure()
+        Toast.makeText(getApplication(), "Set Camera Lens to Calculated f/$workingF", Toast.LENGTH_SHORT).show()
     }
 
     // Cloud Sync

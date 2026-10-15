@@ -243,6 +243,139 @@ object DefaultData {
         )
     )
 
+    val INITIAL_CAMERA_BODIES = listOf(
+        CameraBodyEntity(
+            brand = "Canon",
+            modelName = "EOS R5",
+            sensorFormat = "Full Frame (35mm)",
+            cropFactor = 1.0f,
+            baseIso = 100,
+            maxIso = 51200,
+            maxShutterSpeed = "1/8000",
+            hasIbis = true,
+            serialNumber = "CN-042021004918",
+            weightGrams = 738,
+            inBag = true,
+            notes = "Primary 45MP full-frame studio & landscape body."
+        ),
+        CameraBodyEntity(
+            brand = "Sony",
+            modelName = "Alpha A7 IV",
+            sensorFormat = "Full Frame (35mm)",
+            cropFactor = 1.0f,
+            baseIso = 100,
+            maxIso = 51200,
+            maxShutterSpeed = "1/8000",
+            hasIbis = true,
+            serialNumber = "SN-55829104",
+            weightGrams = 658,
+            inBag = true,
+            notes = "33MP hybrid mirrorless body with fast Bionic XR autofocus."
+        ),
+        CameraBodyEntity(
+            brand = "Nikon",
+            modelName = "Z8",
+            sensorFormat = "Full Frame (35mm)",
+            cropFactor = 1.0f,
+            baseIso = 64,
+            maxIso = 25600,
+            maxShutterSpeed = "1/32000",
+            hasIbis = true,
+            serialNumber = "NK-88200194",
+            weightGrams = 910,
+            inBag = false,
+            notes = "Electronic shutter flagship with base ISO 64 dynamic range."
+        ),
+        CameraBodyEntity(
+            brand = "Fujifilm",
+            modelName = "X-T5",
+            sensorFormat = "APS-C (Sony/Nikon/Fuji)",
+            cropFactor = 1.5f,
+            baseIso = 125,
+            maxIso = 12800,
+            maxShutterSpeed = "1/8000",
+            hasIbis = true,
+            serialNumber = "FJ-91048201",
+            weightGrams = 557,
+            inBag = false,
+            notes = "Compact 40MP street & travel body with classic exposure dials."
+        )
+    )
+
+    val INITIAL_LENSES = listOf(
+        LensEntity(
+            brand = "Canon",
+            lensName = "RF 24-70mm f/2.8L IS USM",
+            minFocalLength = 24,
+            maxFocalLength = 70,
+            maxAperture = 2.8f,
+            minAperture = 22f,
+            hasOis = true,
+            filterThreadMm = 82,
+            serialNumber = "CN-L-98200142",
+            weightGrams = 900,
+            inBag = true,
+            notes = "Standard pro zoom with 5-stop optical image stabilization."
+        ),
+        LensEntity(
+            brand = "Canon",
+            lensName = "RF 50mm f/1.2L USM",
+            minFocalLength = 50,
+            maxFocalLength = 50,
+            maxAperture = 1.2f,
+            minAperture = 16f,
+            hasOis = false,
+            filterThreadMm = 77,
+            serialNumber = "CN-L-31900217",
+            weightGrams = 950,
+            inBag = true,
+            notes = "Ultra-fast prime for low-light portraits and dreamlike bokeh."
+        ),
+        LensEntity(
+            brand = "Sony",
+            lensName = "FE 24-70mm f/2.8 GM II",
+            minFocalLength = 24,
+            maxFocalLength = 70,
+            maxAperture = 2.8f,
+            minAperture = 22f,
+            hasOis = false,
+            filterThreadMm = 82,
+            serialNumber = "SN-L-77401928",
+            weightGrams = 695,
+            inBag = true,
+            notes = "Ultra-sharp G Master zoom, extremely lightweight."
+        ),
+        LensEntity(
+            brand = "Sony",
+            lensName = "FE 85mm f/1.4 GM II",
+            minFocalLength = 85,
+            maxFocalLength = 85,
+            maxAperture = 1.4f,
+            minAperture = 16f,
+            hasOis = false,
+            filterThreadMm = 77,
+            serialNumber = "SN-L-88401211",
+            weightGrams = 642,
+            inBag = false,
+            notes = "Classic focal length for compression and subject separation."
+        ),
+        LensEntity(
+            brand = "Nikon",
+            lensName = "NIKKOR Z 24-70mm f/2.8 S",
+            minFocalLength = 24,
+            maxFocalLength = 70,
+            maxAperture = 2.8f,
+            minAperture = 22f,
+            hasOis = false,
+            filterThreadMm = 82,
+            serialNumber = "NK-L-44109823",
+            weightGrams = 805,
+            inBag = false,
+            notes = "Constant f/2.8 aperture S-Line professional zoom lens."
+        )
+    )
+
+
     data class GuideTopic(
         val title: String,
         val subtitle: String,

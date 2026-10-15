@@ -23,11 +23,7 @@ import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.FlashOn
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -48,6 +44,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ExposurePriority
 import com.example.data.repository.SyncState
+
+// Static immutable definitions to eliminate per-recomposition allocations
+private val EXPOSURE_MODES = listOf(
+    ExposurePriority.APERTURE_PRIORITY to "Av (Aperture)",
+    ExposurePriority.SHUTTER_PRIORITY to "Tv (Shutter)",
+    ExposurePriority.ISO_PRIORITY to "Sv (ISO)",
+    ExposurePriority.MANUAL_LOCK to "M (Lock)"
+)
+
+private val QUICK_ISOS = intArrayOf(100, 200, 400, 800, 1600, 3200, 6400, 12800)
+
+private val ND_OPTIONS = listOf(
+    0 to "None (0 EV)",
+    1 to "ND2 (-1 EV)",
+    2 to "ND4 (-2 EV)",
+    3 to "ND8 (-3 EV)",
+    6 to "ND64 (-6 EV)",
+    10 to "ND1000 (-10 EV)"
+)
 
 @Composable
 fun QuickAccessBar(
@@ -170,14 +185,7 @@ fun QuickAccessBar(
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            val modes = listOf(
-                ExposurePriority.APERTURE_PRIORITY to "Av (Aperture)",
-                ExposurePriority.SHUTTER_PRIORITY to "Tv (Shutter)",
-                ExposurePriority.ISO_PRIORITY to "Sv (ISO)",
-                ExposurePriority.MANUAL_LOCK to "M (Lock)"
-            )
-
-            modes.forEach { (mode, label) ->
+            EXPOSURE_MODES.forEach { (mode, label) ->
                 val isSelected = priority == mode
                 Box(
                     modifier = Modifier
@@ -219,74 +227,66 @@ fun QuickAccessBar(
                         .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    listOf(100, 200, 400, 800, 1600, 3200, 6400, 12800).forEach { isoVal ->
+                    QUICK_ISOS.forEach { isoVal ->
                         val isSelected = currentIso == isoVal
                         Box(
                             modifier = Modifier
                                 .testTag("quick_iso_$isoVal")
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(if (isSelected) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.surface)
-                                .clickable { onIsoSelect(isoVal) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = "$isoVal",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = if (isSelected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurface
-                            )
-                        }
+                            .clickable { onIsoSelect(isoVal) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "$isoVal",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = if (isSelected) MaterialTheme.colorScheme.onSecondary else MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
-                // Quick ND Filter Row
-                Text(
-                    text = "NEUTRAL DENSITY (ND FILTER)",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    val ndOptions = listOf(
-                        0 to "None (0 EV)",
-                        1 to "ND2 (-1 EV)",
-                        2 to "ND4 (-2 EV)",
-                        3 to "ND8 (-3 EV)",
-                        6 to "ND64 (-6 EV)",
-                        10 to "ND1000 (-10 EV)"
-                    )
-                    ndOptions.forEach { (stops, label) ->
-                        val isSelected = currentNdStops == stops
-                        Box(
-                            modifier = Modifier
-                                .testTag("quick_nd_$stops")
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
-                                .border(
-                                    1.dp,
-                                    if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                                    RoundedCornerShape(6.dp)
-                                )
-                                .clickable { onNdSelect(stops) }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+            // Quick ND Filter Row
+            Text(
+                text = "NEUTRAL DENSITY (ND FILTER)",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 3.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                ND_OPTIONS.forEach { (stops, label) ->
+                    val isSelected = currentNdStops == stops
+                    Box(
+                        modifier = Modifier
+                            .testTag("quick_nd_$stops")
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
+                            .border(
+                                1.dp,
+                                if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                RoundedCornerShape(6.dp)
                             )
-                        }
+                            .clickable { onNdSelect(stops) }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        )
                     }
                 }
             }
         }
     }
+}
 }

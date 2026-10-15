@@ -39,11 +39,35 @@ object GeminiService {
     }
 
     /**
-     * Converts a Bitmap to base64 JPEG string
+     * Downscales large high-megapixel photos to maxDimension preserving aspect ratio
+     * to eliminate memory pressure, prevent OutOfMemory errors, and accelerate encoding.
+     */
+    fun scaleDownBitmapIfNeeded(source: Bitmap, maxDimension: Int = 1024): Bitmap {
+        val width = source.width
+        val height = source.height
+        if (width <= maxDimension && height <= maxDimension) {
+            return source
+        }
+        val ratio = width.toFloat() / height.toFloat()
+        val newWidth: Int
+        val newHeight: Int
+        if (width > height) {
+            newWidth = maxDimension
+            newHeight = (maxDimension / ratio).toInt()
+        } else {
+            newHeight = maxDimension
+            newWidth = (maxDimension * ratio).toInt()
+        }
+        return Bitmap.createScaledBitmap(source, newWidth.coerceAtLeast(1), newHeight.coerceAtLeast(1), true)
+    }
+
+    /**
+     * Converts a Bitmap to base64 JPEG string with automatic memory-safe downscaling.
      */
     fun bitmapToBase64(bitmap: Bitmap, quality: Int = 85): String {
+        val scaled = scaleDownBitmapIfNeeded(bitmap, 1024)
         val outputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+        scaled.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
         val bytes = outputStream.toByteArray()
         return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }

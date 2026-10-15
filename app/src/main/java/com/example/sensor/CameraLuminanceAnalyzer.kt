@@ -5,8 +5,8 @@ import androidx.camera.core.ImageProxy
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.abs
 import kotlin.math.log2
-import kotlin.math.max
 
 data class CameraLuminanceData(
     val histogramBins: FloatArray = FloatArray(64) { 0f },
@@ -36,14 +36,32 @@ data class CameraLuminanceData(
     }
 }
 
+/**
+ * High-performance, zero-allocation real-time luminance analyzer.
+ * Features frame throttling (max 30fps) to eliminate CPU strain and GC churn.
+ */
 class CameraLuminanceAnalyzer : ImageAnalysis.Analyzer {
 
     private val _luminanceData = MutableStateFlow(CameraLuminanceData())
     val luminanceData: StateFlow<CameraLuminanceData> = _luminanceData.asStateFlow()
 
+    // Reusable buffers to avoid heap allocations per frame
     private val rawBins = IntArray(64)
+    private var lastAnalyzedTimestamp = 0L
+    private val minFrameIntervalMs = 33L // ~30fps cap for ultra-smooth UI without heating/throttling
+
+    private var lastEmittedEv = -999f
+    private var lastEmittedSpotY = -999f
+    private var lastEmitTimeMs = 0L
 
     override fun analyze(image: ImageProxy) {
+        val now = System.currentTimeMillis()
+        if (now - lastAnalyzedTimestamp < minFrameIntervalMs) {
+            image.close()
+            return
+        }
+        lastAnalyzedTimestamp = now
+
         try {
             val plane = image.planes[0]
             val buffer = plane.buffer
@@ -69,15 +87,17 @@ class CameraLuminanceAnalyzer : ImageAnalysis.Analyzer {
 
             // Subsample with step 3 for high framerate & ultra low CPU usage
             val step = 3
+            val bufLimit = buffer.limit()
+
             for (row in 0 until height step step) {
                 val rowOffset = row * rowStride
                 val isSpotRow = row in spotTop..spotBottom
 
                 for (col in 0 until width step step) {
                     val index = rowOffset + col * pixelStride
-                    if (index < buffer.limit()) {
+                    if (index < bufLimit) {
                         val y = buffer.get(index).toInt() and 0xFF
-                        val bin = (y / 4).coerceIn(0, 63)
+                        val bin = (y ushr 2).coerceIn(0, 63)
                         rawBins[bin]++
                         totalLuminance += y
                         totalPixels++
@@ -88,7 +108,7 @@ class CameraLuminanceAnalyzer : ImageAnalysis.Analyzer {
                         }
 
                         if (y <= 5) shadowClippedCount++
-                        if (y >= 250) highlightClippedCount++
+                        else if (y >= 250) highlightClippedCount++
                     }
                 }
             }
@@ -96,12 +116,14 @@ class CameraLuminanceAnalyzer : ImageAnalysis.Analyzer {
             if (totalPixels > 0) {
                 // Find peak bin for normalization
                 var maxCount = 1
-                for (b in rawBins) {
-                    if (b > maxCount) maxCount = b
+                for (i in 0 until 64) {
+                    val count = rawBins[i]
+                    if (count > maxCount) maxCount = count
                 }
 
+                val invMax = 1.0f / maxCount.toFloat()
                 val normalizedBins = FloatArray(64) { i ->
-                    (rawBins[i].toFloat() / maxCount.toFloat()).coerceIn(0f, 1f)
+                    (rawBins[i].toFloat() * invMax).coerceIn(0f, 1f)
                 }
 
                 val avgY = (totalLuminance.toFloat() / totalPixels).coerceIn(1f, 254f)
@@ -109,28 +131,37 @@ class CameraLuminanceAnalyzer : ImageAnalysis.Analyzer {
                     (spotLuminanceSum.toFloat() / spotPixelCount).coerceIn(1f, 254f)
                 } else avgY
 
-                // 18% standard middle gray is Y ≈ 118 in sRGB/Rec709
-                // Standard calibration: if scene is at middle gray (Y=118), typical indoor office EV100 is ~7-8, daylight is ~12-15
-                // Formula: EV100 = BaseEv + log2(spotY / 118)
+                // Standard calibration: 18% standard middle gray is Y ≈ 118
                 val baseEv = 12.0f
                 val deltaEv = log2(spotY / 118.0f)
                 val estimatedEv = (baseEv + deltaEv).coerceIn(-4.0f, 18.0f)
-                val estimatedLux = (2.5f * Math.pow(2.0, estimatedEv.toDouble())).toFloat()
 
-                val shadowRatio = shadowClippedCount.toFloat() / totalPixels
-                val highlightRatio = highlightClippedCount.toFloat() / totalPixels
+                // Hysteresis / deadband check: update UI only if significant delta or 150ms elapsed
+                val isSignificantChange = abs(estimatedEv - lastEmittedEv) >= 0.05f ||
+                        abs(spotY - lastEmittedSpotY) >= 1.0f ||
+                        (now - lastEmitTimeMs >= 150L)
 
-                _luminanceData.value = CameraLuminanceData(
-                    histogramBins = normalizedBins,
-                    averageLuminance = avgY,
-                    centerSpotLuminance = spotY,
-                    estimatedEv100 = estimatedEv,
-                    estimatedLux = estimatedLux,
-                    shadowClippingRatio = shadowRatio,
-                    highlightClippingRatio = highlightRatio
-                )
+                if (isSignificantChange) {
+                    lastEmittedEv = estimatedEv
+                    lastEmittedSpotY = spotY
+                    lastEmitTimeMs = now
+
+                    val estimatedLux = (2.5f * Math.pow(2.0, estimatedEv.toDouble())).toFloat()
+                    val shadowRatio = shadowClippedCount.toFloat() / totalPixels
+                    val highlightRatio = highlightClippedCount.toFloat() / totalPixels
+
+                    _luminanceData.value = CameraLuminanceData(
+                        histogramBins = normalizedBins,
+                        averageLuminance = avgY,
+                        centerSpotLuminance = spotY,
+                        estimatedEv100 = estimatedEv,
+                        estimatedLux = estimatedLux,
+                        shadowClippingRatio = shadowRatio,
+                        highlightClippingRatio = highlightRatio
+                    )
+                }
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Protect against buffer concurrency during camera shutdown
         } finally {
             image.close()

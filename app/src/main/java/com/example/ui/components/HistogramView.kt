@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -39,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.exp
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 @Composable
 fun HistogramView(
@@ -56,24 +58,41 @@ fun HistogramView(
         label = "histogram_ev_anim"
     )
 
-    // Center of distribution shifted by stop difference
-    val meanBin = (128f + (animatedStopDiff / 3.0f) * 80f).coerceIn(20f, 235f)
+    // Quantize meanBin key to reduce recalculation during animation
+    val quantizedKey = remember(animatedStopDiff) { (animatedStopDiff * 10f).roundToInt() }
     val stdDev = 38f
 
-    val bins = remember(meanBin, customBins) {
+    val bins = remember(quantizedKey, customBins) {
         if (customBins != null && customBins.size >= 64) {
             customBins
         } else {
+            val meanBin = (128f + (quantizedKey / 30f) * 80f).coerceIn(20f, 235f)
+            val twoStdDevSq = 2f * stdDev * stdDev
             FloatArray(64) { i ->
                 val x = i * 4f
-                val gaussian = exp(-((x - meanBin).pow(2)) / (2 * stdDev.pow(2)))
+                val diff = x - meanBin
+                val gaussian = exp(-(diff * diff) / twoStdDevSq)
                 (gaussian * 0.9f).coerceIn(0.05f, 1.0f)
             }
         }
     }
 
-    val isShadowClipped = (customBins != null && customBins.isNotEmpty() && customBins[0] > 0.30f) || stopDiff <= -2.5f
-    val isHighlightClipped = (customBins != null && customBins.isNotEmpty() && customBins[customBins.size - 1] > 0.30f) || stopDiff >= 2.5f
+    val isShadowClipped by remember(customBins, stopDiff) {
+        derivedStateOf {
+            (customBins != null && customBins.isNotEmpty() && customBins[0] > 0.30f) || stopDiff <= -2.5f
+        }
+    }
+    val isHighlightClipped by remember(customBins, stopDiff) {
+        derivedStateOf {
+            (customBins != null && customBins.isNotEmpty() && customBins[customBins.size - 1] > 0.30f) || stopDiff >= 2.5f
+        }
+    }
+
+    // Pre-allocated reusable paths across recompositions to eliminate GC churn
+    val lumPath = remember { Path() }
+    val strokePath = remember { Path() }
+    val rPath = remember { Path() }
+    val bPath = remember { Path() }
 
     Column(
         modifier = modifier
@@ -146,7 +165,7 @@ fun HistogramView(
 
         Spacer(modifier = Modifier.height(6.dp))
 
-        // Canvas for Histogram Curves
+        // Canvas for Histogram Curves with zero-allocation path reuse
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -161,6 +180,8 @@ fun HistogramView(
             Canvas(modifier = Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 2.dp)) {
                 val width = size.width
                 val height = size.height
+                val binCount = bins.size
+                if (binCount < 2) return@Canvas
 
                 // Draw Zone Grid Lines (Zone 0, III, V Middle Gray, VII, X)
                 val zoneV = width * 0.5f
@@ -187,15 +208,24 @@ fun HistogramView(
                     strokeWidth = 1f
                 )
 
-                // Draw filled luminance histogram
-                val step = width / (bins.size - 1)
-                val lumPath = Path()
-                lumPath.moveTo(0f, height)
+                // Reuse pre-allocated paths
+                val step = width / (binCount - 1)
+                lumPath.reset()
+                strokePath.reset()
 
-                for (i in bins.indices) {
+                val heightScale = height * 0.92f
+
+                for (i in 0 until binCount) {
                     val x = i * step
-                    val y = height - (bins[i] * height * 0.92f)
-                    if (i == 0) lumPath.moveTo(x, y) else lumPath.lineTo(x, y)
+                    val y = height - (bins[i] * heightScale)
+                    if (i == 0) {
+                        lumPath.moveTo(x, height)
+                        lumPath.lineTo(x, y)
+                        strokePath.moveTo(x, y)
+                    } else {
+                        lumPath.lineTo(x, y)
+                        strokePath.lineTo(x, y)
+                    }
                 }
                 lumPath.lineTo(width, height)
                 lumPath.close()
@@ -210,13 +240,6 @@ fun HistogramView(
                     )
                 )
 
-                // Outline curve
-                val strokePath = Path()
-                for (i in bins.indices) {
-                    val x = i * step
-                    val y = height - (bins[i] * height * 0.92f)
-                    if (i == 0) strokePath.moveTo(x, y) else strokePath.lineTo(x, y)
-                }
                 drawPath(
                     path = strokePath,
                     color = primaryColor,
@@ -224,13 +247,14 @@ fun HistogramView(
                 )
 
                 if (showRgbCurves) {
-                    // Slight Red and Cyan channel variations for true pro colorist look
-                    val rPath = Path()
-                    val bPath = Path()
-                    for (i in bins.indices) {
+                    rPath.reset()
+                    bPath.reset()
+                    val rScale = height * 0.90f
+                    for (i in 0 until binCount) {
                         val x = i * step
-                        val yr = height - (bins[i] * (0.85f + (i % 3) * 0.05f) * height * 0.9f)
-                        val yb = height - (bins[i] * (0.88f + ((i + 1) % 3) * 0.04f) * height * 0.9f)
+                        val bVal = bins[i]
+                        val yr = height - (bVal * (0.85f + (i % 3) * 0.05f) * rScale)
+                        val yb = height - (bVal * (0.88f + ((i + 1) % 3) * 0.04f) * rScale)
                         if (i == 0) {
                             rPath.moveTo(x, yr)
                             bPath.moveTo(x, yb)
