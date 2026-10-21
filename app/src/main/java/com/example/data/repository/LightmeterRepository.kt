@@ -38,6 +38,28 @@ class LightmeterRepository(private val context: Context) {
     private val _lastSyncTimestamp = MutableStateFlow(System.currentTimeMillis())
     val lastSyncTimestamp: StateFlow<Long> = _lastSyncTimestamp.asStateFlow()
 
+    private val themePrefs = context.getSharedPreferences("lightmeter_theme_prefs", Context.MODE_PRIVATE)
+
+    fun getSavedAccentColor(): com.example.ui.theme.AppAccentColor {
+        val id = themePrefs.getString("accent_color_id", com.example.ui.theme.AppAccentColor.STUDIO_AMBER.id)
+            ?: com.example.ui.theme.AppAccentColor.STUDIO_AMBER.id
+        return com.example.ui.theme.AppAccentColor.fromId(id)
+    }
+
+    fun saveAccentColor(color: com.example.ui.theme.AppAccentColor) {
+        themePrefs.edit().putString("accent_color_id", color.id).apply()
+    }
+
+    fun getSavedBackgroundVibe(): com.example.ui.theme.AppBackgroundVibe {
+        val id = themePrefs.getString("background_vibe_id", com.example.ui.theme.AppBackgroundVibe.OBSIDIAN_SLATE.id)
+            ?: com.example.ui.theme.AppBackgroundVibe.OBSIDIAN_SLATE.id
+        return com.example.ui.theme.AppBackgroundVibe.fromId(id)
+    }
+
+    fun saveBackgroundVibe(vibe: com.example.ui.theme.AppBackgroundVibe) {
+        themePrefs.edit().putString("background_vibe_id", vibe.id).apply()
+    }
+
     init {
         // Pre-populate if empty
         CoroutineScope(Dispatchers.IO).launch {

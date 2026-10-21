@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.MainViewModel
 import com.example.ui.components.CameraViewfinderOverlay
+import com.example.ui.components.DynamicCalculationsCard
 import com.example.ui.components.ExposureDialControl
 import com.example.ui.components.HistogramView
 import com.example.ui.components.QuickAccessBar
@@ -64,6 +65,7 @@ import com.example.ui.components.QuickAccessBar
 @Composable
 fun LiveMeterScreen(
     viewModel: MainViewModel,
+    onOpenColorPicker: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -88,6 +90,7 @@ fun LiveMeterScreen(
     val aperture by viewModel.aperture.collectAsState()
     val shutterSpeed by viewModel.shutterSpeed.collectAsState()
     val ndStops by viewModel.ndFilterStops.collectAsState()
+    val subjectDistance by viewModel.subjectDistanceMeters.collectAsState()
 
     val isRedNightMode by viewModel.isRedNightMode.collectAsState()
     val isBatterySaver by viewModel.isBatterySaver.collectAsState()
@@ -127,7 +130,8 @@ fun LiveMeterScreen(
             isBatterySaver = isBatterySaver,
             onToggleBatterySaver = { viewModel.toggleBatterySaver() },
             syncState = syncState,
-            onTriggerSync = { viewModel.triggerSync() }
+            onTriggerSync = { viewModel.triggerSync() },
+            onOpenColorPicker = onOpenColorPicker
         )
 
         // Main Luminous Incident Dome Readout
@@ -426,6 +430,23 @@ fun LiveMeterScreen(
             priority = priority,
             reciprocalWarning = isRisk,
             recommendedHandheldShutter = recommendedShutter
+        )
+
+        // Dynamic Calculations & Optical Physics Engine (DoF, Exposure Balance, Kinetic Motion, ND Multipliers, Astrophotography)
+        val dofCalc = viewModel.getDepthOfFieldCalculation()
+        val balanceCalc = viewModel.getExposureBalanceCalculation()
+        val astroCalc = viewModel.getAstroCalculation()
+        val ndOptions = viewModel.getNdLongExposures()
+        val motionEffect = viewModel.getMotionBlurEffect()
+
+        DynamicCalculationsCard(
+            dof = dofCalc,
+            balance = balanceCalc,
+            astro = astroCalc,
+            ndOptions = ndOptions,
+            motion = motionEffect,
+            subjectDistanceMeters = subjectDistance,
+            onDistanceChange = { viewModel.setSubjectDistance(it) }
         )
 
         // Real-Time Histogram Display (Using CameraX Luminance Stream when Viewfinder is Active)

@@ -33,8 +33,10 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Speed
+import com.example.ui.components.ColorThemePickerDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
@@ -93,10 +95,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val viewModel: MainViewModel = viewModel()
+            val selectedAccent by viewModel.selectedAccentColor.collectAsState()
+            val selectedVibe by viewModel.selectedBackgroundVibe.collectAsState()
             val isRedNightMode by viewModel.isRedNightMode.collectAsState()
             val isBatterySaver by viewModel.isBatterySaver.collectAsState()
 
             LightmeterProTheme(
+                accentColor = selectedAccent,
+                backgroundVibe = selectedVibe,
                 isRedNightMode = isRedNightMode,
                 isBatterySaverMode = isBatterySaver
             ) {
@@ -111,7 +117,10 @@ class MainActivity : ComponentActivity() {
 fun MainAppContent(viewModel: MainViewModel) {
     var currentScreen by remember { mutableStateOf(AppScreen.METER) }
     var showMoreMenu by remember { mutableStateOf(false) }
+    var showColorPicker by remember { mutableStateOf(false) }
 
+    val selectedAccent by viewModel.selectedAccentColor.collectAsState()
+    val selectedVibe by viewModel.selectedBackgroundVibe.collectAsState()
     val isRedNightMode by viewModel.isRedNightMode.collectAsState()
     val isBatterySaver by viewModel.isBatterySaver.collectAsState()
 
@@ -157,6 +166,18 @@ fun MainAppContent(viewModel: MainViewModel) {
                     }
                 },
                 actions = {
+                    // App Colors Palette Picker
+                    IconButton(
+                        onClick = { showColorPicker = true },
+                        modifier = Modifier.testTag("topbar_color_picker")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = "Choose App Colors",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     // Red Night Vision Toggle
                     IconButton(
                         onClick = { viewModel.toggleRedNightMode() },
@@ -275,6 +296,14 @@ fun MainAppContent(viewModel: MainViewModel) {
                                         showMoreMenu = false
                                     }
                                 )
+                                DropdownMenuItem(
+                                    text = { Text("App Colors & Palette") },
+                                    leadingIcon = { Icon(Icons.Default.Palette, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        showColorPicker = true
+                                        showMoreMenu = false
+                                    }
+                                )
                             }
                         }
                     },
@@ -308,7 +337,10 @@ fun MainAppContent(viewModel: MainViewModel) {
                 .padding(paddingValues)
         ) {
             when (currentScreen) {
-                AppScreen.METER -> LiveMeterScreen(viewModel = viewModel)
+                AppScreen.METER -> LiveMeterScreen(
+                    viewModel = viewModel,
+                    onOpenColorPicker = { showColorPicker = true }
+                )
                 AppScreen.PHOTO -> PhotoAnalysisScreen(viewModel = viewModel)
                 AppScreen.STUDIO -> LightingCalcScreen(viewModel = viewModel)
                 AppScreen.PRESETS -> PresetsScreen(
@@ -321,5 +353,16 @@ fun MainAppContent(viewModel: MainViewModel) {
                 AppScreen.ADVISOR -> AiAdvisorScreen(viewModel = viewModel)
             }
         }
+    }
+
+    if (showColorPicker) {
+        ColorThemePickerDialog(
+            selectedAccent = selectedAccent,
+            selectedVibe = selectedVibe,
+            onSelectAccent = { viewModel.setAccentColor(it) },
+            onSelectVibe = { viewModel.setBackgroundVibe(it) },
+            onResetToDefault = { viewModel.resetThemeColors() },
+            onDismiss = { showColorPicker = false }
+        )
     }
 }

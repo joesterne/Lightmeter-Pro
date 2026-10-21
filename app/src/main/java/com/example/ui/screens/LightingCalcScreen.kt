@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,12 +63,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.MainViewModel
+import com.example.data.model.DynamicLightingPhysics
 import com.example.data.model.LightReading
 import com.example.data.model.LightRole
 import com.example.data.model.PortraitRatioCalculation
 import com.example.data.model.StudioLight
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // Reusable static lists to eliminate per-recomposition allocations
@@ -171,6 +175,9 @@ fun LightingCalcScreen(
                             bgEnabled = bgEnabled,
                             presetName = name
                         )
+                    },
+                    onApplyDynamicRatio = { ratio ->
+                        viewModel.applyDynamicFillRatio(ratio)
                     }
                 )
             } else {
@@ -198,7 +205,8 @@ private fun PortraitRatioCalculatorSection(
     onToggleEnabled: (LightRole) -> Unit,
     onImportCurrentMeter: (LightRole) -> Unit,
     onApplyWorkingAperture: () -> Unit,
-    onApplyPreset: (Float, Float, Int, Float, Int, Float, Boolean, String) -> Unit
+    onApplyPreset: (Float, Float, Int, Float, Int, Float, Boolean, String) -> Unit,
+    onApplyDynamicRatio: (Float) -> Unit
 ) {
     // Top Ratio Dashboard Card
     PortraitRatioDashboardCard(
@@ -212,6 +220,12 @@ private fun PortraitRatioCalculatorSection(
 
     // Style Interpretation & Hair Warning Banner
     StyleAndWarningsCard(calc = calc)
+
+    // Dynamic Target Ratio Solver Card
+    DynamicTargetRatioSolverCard(
+        calc = calc,
+        onApplyDynamicRatio = onApplyDynamicRatio
+    )
 
     // Quick Portrait Lighting Presets
     PortraitPresetsRow(onApplyPreset = onApplyPreset)
@@ -1101,6 +1115,9 @@ private fun StrobeGuideNumberSection(
         }
     }
 
+    // Dynamic Inverse Square Law Falloff Modeler
+    DynamicInverseSquareFalloffCard()
+
     // List of Studio Lights
     Text(
         text = "ACTIVE STROBES & LIGHTS",
@@ -1253,6 +1270,263 @@ private fun StudioLightCard(
                     valueRange = 0.5f..8.0f,
                     colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.secondary)
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Dynamic Target Ratio Solver Card
+ */
+@Composable
+private fun DynamicTargetRatioSolverCard(
+    calc: PortraitRatioCalculation,
+    onApplyDynamicRatio: (Float) -> Unit
+) {
+    var targetRatio by remember { mutableFloatStateOf(3.0f) }
+    val solvedFill = remember(targetRatio, calc.keyLight.effectiveFStop) {
+        DynamicLightingPhysics.solveFillAperture(calc.keyLight.effectiveFStop, targetRatio)
+    }
+
+    Card(
+        modifier = Modifier
+            .testTag("dynamic_ratio_solver_card")
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Tune,
+                        contentDescription = "Dynamic Ratio Solver",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "DYNAMIC RATIO SOLVER",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                Text(
+                    text = "${(targetRatio * 10).roundToInt() / 10f} : 1 Ratio",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Drag target lighting ratio to dynamically calculate and solve required Fill Light aperture based on Key Light (${calc.keyLight.displayString}):",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Slider(
+                value = targetRatio,
+                onValueChange = { targetRatio = it },
+                valueRange = 1.0f..8.0f,
+                steps = 13,
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary
+                ),
+                modifier = Modifier.testTag("dynamic_target_ratio_slider")
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val solvedBaseAp = solvedFill.first
+                val solvedTenths = solvedFill.second
+                val baseLabel = if (solvedBaseAp % 1f == 0f) "${solvedBaseAp.toInt()}" else "$solvedBaseAp"
+                Column {
+                    Text(
+                        text = "SOLVED FILL APERTURE:",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "f/$baseLabel.$solvedTenths",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF38BDF8)
+                    )
+                }
+
+                Button(
+                    onClick = { onApplyDynamicRatio(targetRatio) },
+                    modifier = Modifier.testTag("apply_dynamic_ratio_button"),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Apply Dynamic Fill", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Dynamic Inverse-Square Law Distance Falloff Calculator Card
+ */
+@Composable
+private fun DynamicInverseSquareFalloffCard() {
+    var initialDist by remember { mutableFloatStateOf(1.5f) }
+    var newDist by remember { mutableFloatStateOf(3.0f) }
+
+    val deltaStops = remember(initialDist, newDist) {
+        DynamicLightingPhysics.calculateInverseSquareDeltaStops(initialDist, newDist)
+    }
+    val intensityPercent = remember(initialDist, newDist) {
+        val ratio = (initialDist / newDist).toDouble()
+        ((ratio * ratio) * 100.0).toFloat().coerceIn(1f, 1600f)
+    }
+
+    Card(
+        modifier = Modifier
+            .testTag("dynamic_inverse_square_card")
+            .fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Speed,
+                        contentDescription = "Inverse Square Law",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "INVERSE SQUARE FALLOFF MODELER",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "E = I / d²",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                        fontFamily = FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Initial Distance Slider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Original Distance (d₁)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${String.format(java.util.Locale.US, "%.1f", initialDist)} m", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
+            Slider(
+                value = initialDist,
+                onValueChange = { initialDist = it },
+                valueRange = 0.5f..5.0f,
+                modifier = Modifier.testTag("initial_dist_slider")
+            )
+
+            // New Distance Slider
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("New Distance (d₂)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${String.format(java.util.Locale.US, "%.1f", newDist)} m", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary)
+            }
+            Slider(
+                value = newDist,
+                onValueChange = { newDist = it },
+                valueRange = 0.5f..8.0f,
+                modifier = Modifier.testTag("new_dist_slider"),
+                colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.secondary)
+            )
+
+            // Resulting Dynamic Calculation Box
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF0F172A))
+                    .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(10.dp))
+                    .padding(10.dp)
+            ) {
+                Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("LIGHT FALLOFF DELTA", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            val prefix = if (deltaStops >= 0) "+" else ""
+                            Text(
+                                text = "$prefix${String.format(java.util.Locale.US, "%.1f", deltaStops)} EV Stops",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (deltaStops >= 0) Color(0xFF10B981) else Color(0xFFF59E0B)
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("RELATIVE INTENSITY", style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                text = "${String.format(java.util.Locale.US, "%.1f", intensityPercent)}%",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = if (deltaStops < 0) {
+                            "Light dropped by ${String.format(java.util.Locale.US, "%.1f", -deltaStops)} stops. Open lens aperture by ${String.format(java.util.Locale.US, "%.1f", -deltaStops)} stops or increase strobe power by ${String.format(java.util.Locale.US, "%.1f", 100f / intensityPercent)}x to maintain exposure."
+                        } else {
+                            "Light increased by +${String.format(java.util.Locale.US, "%.1f", deltaStops)} stops. Close lens aperture by ${String.format(java.util.Locale.US, "%.1f", deltaStops)} stops or lower strobe power."
+                        },
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
             }
         }
     }

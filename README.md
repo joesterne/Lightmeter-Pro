@@ -48,6 +48,25 @@
    - Built-in field cheat sheet (Sunny 16, Reciprocal rule, Flash sync & HSS, Zone System, ND filters).
    - Save and apply custom shooting environment presets.
 
+8. **Customizable App Colors & Studio Ambiance**:
+   - **8 Curated Photography Accent Palettes**:
+     - *Studio Amber* (`#F59E0B`): Warm 3200K tungsten studio light meter aesthetic (default).
+     - *Leica Crimson* (`#E11D48`): Iconic rangefinder red dot passion.
+     - *Zeiss Cobalt* (`#3B82F6`): Precision optical lens coating blue.
+     - *Fuji Emerald* (`#10B981`): Rich Velvia landscape emulsion green.
+     - *Neon Violet* (`#8B5CF6`): Modern cinema mood lighting.
+     - *Kodak Gold* (`#EAB308`): Portra golden hour warm tones.
+     - *Titanium Silver* (`#E2E8F0`): Clean monochrome stealth finish.
+     - *Cinematic Teal* (`#06B6D4`): Hollywood blockbuster teal & orange grade.
+   - **4 Studio Background Ambiance Presets**:
+     - *Obsidian Slate* (`#090D14`): Modern dark studio slate.
+     - *Midnight Navy* (`#080D1A`): Deep darkroom navy.
+     - *Carbon Neutral* (`#121316`): Balanced cinema film gray.
+     - *AMOLED Pitch Black* (`#000000`): Zero-emission battery saving OLED contrast.
+   - **Interactive Live Preview**: Real-time swatch cards showing dials, aperture boundaries, ISO readouts, and trigger buttons.
+   - **Seamless Quick Access**: Color customization available via 1-tap top bar icon, home screen Quick Controls bar, and the More drawer.
+   - **Persistent Memory**: Preferences saved across app sessions.
+
 ---
 
 ## ⚡ Performance & Speed Optimizations

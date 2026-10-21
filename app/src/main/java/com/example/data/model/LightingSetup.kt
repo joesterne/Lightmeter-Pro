@@ -212,3 +212,44 @@ data class MultiLightSetup(
             }
         }
 }
+
+object DynamicLightingPhysics {
+    /**
+     * Inverse Square Law: E2 = E1 * (d1 / d2)^2
+     * Stop change: deltaStops = 2 * log2(d1 / d2)
+     */
+    fun calculateInverseSquareDeltaStops(initialDistanceMeters: Float, newDistanceMeters: Float): Float {
+        val d1 = initialDistanceMeters.coerceAtLeast(0.1f)
+        val d2 = newDistanceMeters.coerceAtLeast(0.1f)
+        return (2.0 * log2((d1 / d2).toDouble())).toFloat()
+    }
+
+    /**
+     * Calculates distance required to produce desired stop change:
+     * d2 = d1 * 2^(-deltaStops / 2)
+     */
+    fun calculateDistanceForStopChange(initialDistanceMeters: Float, deltaStops: Float): Float {
+        val d1 = initialDistanceMeters.coerceAtLeast(0.1f)
+        val d2 = d1 * 2.0.pow((-deltaStops / 2.0).toDouble())
+        return (d2 * 100.0).roundToInt() / 100f
+    }
+
+    /**
+     * Solves for the Fill Light f-stop given a target Key Light and desired source ratio.
+     * Ratio = 2^deltaStops => deltaStops = log2(targetRatio)
+     * f_fill = f_key * 2^(-deltaStops / 2) = f_key / sqrt(targetRatio)
+     */
+    fun solveFillAperture(keyEffectiveFStop: Float, targetSourceRatio: Float): Pair<Float, Int> {
+        val targetFillF = keyEffectiveFStop / sqrt(targetSourceRatio.coerceAtLeast(1.0f).toDouble()).toFloat()
+        // Snap to standard base aperture and tenths
+        val baseApertures = floatArrayOf(1.4f, 2.0f, 2.8f, 4.0f, 5.6f, 8.0f, 11.0f, 16.0f, 22.0f)
+        val baseAp = baseApertures.filter { it <= targetFillF * 1.05f }.maxOrNull() ?: baseApertures.first()
+        // Tenths calculation: f_effective = base * 2^(tenths / 20) => tenths = 20 * log2(target / base)
+        val tenths = if (targetFillF >= baseAp) {
+            (20.0 * log2((targetFillF / baseAp).toDouble())).roundToInt().coerceIn(0, 9)
+        } else {
+            0
+        }
+        return Pair(baseAp, tenths)
+    }
+}

@@ -59,7 +59,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val syncState: StateFlow<SyncState> = repository.syncState
 
-    // UI Modes
+    // UI Modes & Customizable Color Theme
+    private val _selectedAccentColor = MutableStateFlow(repository.getSavedAccentColor())
+    val selectedAccentColor: StateFlow<com.example.ui.theme.AppAccentColor> = _selectedAccentColor.asStateFlow()
+
+    private val _selectedBackgroundVibe = MutableStateFlow(repository.getSavedBackgroundVibe())
+    val selectedBackgroundVibe: StateFlow<com.example.ui.theme.AppBackgroundVibe> = _selectedBackgroundVibe.asStateFlow()
+
     private val _isRedNightMode = MutableStateFlow(false)
     val isRedNightMode: StateFlow<Boolean> = _isRedNightMode.asStateFlow()
 
@@ -102,6 +108,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _ndFilterStops = MutableStateFlow(0)
     val ndFilterStops: StateFlow<Int> = _ndFilterStops.asStateFlow()
+
+    private val _subjectDistanceMeters = MutableStateFlow(2.5f)
+    val subjectDistanceMeters: StateFlow<Float> = _subjectDistanceMeters.asStateFlow()
 
     private val _isMeteringLive = MutableStateFlow(true)
     val isMeteringLive: StateFlow<Boolean> = _isMeteringLive.asStateFlow()
@@ -195,6 +204,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             lightSensorManager.stopListening()
             lightSensorManager.startListening(android.hardware.SensorManager.SENSOR_DELAY_UI)
         }
+    }
+
+    fun setAccentColor(accent: com.example.ui.theme.AppAccentColor) {
+        _selectedAccentColor.value = accent
+        repository.saveAccentColor(accent)
+    }
+
+    fun setBackgroundVibe(vibe: com.example.ui.theme.AppBackgroundVibe) {
+        _selectedBackgroundVibe.value = vibe
+        repository.saveBackgroundVibe(vibe)
+    }
+
+    fun resetThemeColors() {
+        setAccentColor(com.example.ui.theme.AppAccentColor.STUDIO_AMBER)
+        setBackgroundVibe(com.example.ui.theme.AppBackgroundVibe.OBSIDIAN_SLATE)
     }
 
     fun selectBrand(brand: String) {
@@ -355,6 +379,57 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val currentSec = ExposureStandards.shutterSpeedStringToSeconds(_shutterSpeed.value)
         val safeSec = ExposureStandards.shutterSpeedStringToSeconds(getRecommendedHandheldShutter())
         return currentSec > (safeSec * 1.25)
+    }
+
+    // Dynamic Optical & Exposure Calculations
+    fun setSubjectDistance(distanceMeters: Float) {
+        _subjectDistanceMeters.value = distanceMeters.coerceIn(0.2f, 50.0f)
+    }
+
+    fun getDepthOfFieldCalculation(): com.example.data.model.DepthOfFieldCalculation {
+        return ExposureStandards.calculateDepthOfField(
+            focalLengthMm = _focalLengthMm.value,
+            aperture = _aperture.value,
+            subjectDistanceMeters = _subjectDistanceMeters.value,
+            sensorFormat = _selectedCamera.value.sensorFormat
+        )
+    }
+
+    fun getExposureBalanceCalculation(): com.example.data.model.ExposureBalanceCalculation {
+        val sceneEv = if (_isCameraViewfinderActive.value) cameraAnalyzer.luminanceData.value.estimatedEv100 else lightSensorManager.ev100.value
+        return ExposureStandards.calculateExposureBalance(
+            sceneEv100 = sceneEv,
+            shutterSpeed = _shutterSpeed.value,
+            aperture = _aperture.value,
+            iso = _iso.value,
+            ndStops = _ndFilterStops.value
+        )
+    }
+
+    fun getAstroCalculation(): com.example.data.model.AstroStarTrailCalculation {
+        return ExposureStandards.calculateAstroStarTrailing(
+            focalLengthMm = _focalLengthMm.value,
+            aperture = _aperture.value,
+            sensorFormat = _selectedCamera.value.sensorFormat
+        )
+    }
+
+    fun getNdLongExposures(): List<com.example.data.model.NdLongExposureOption> {
+        return ExposureStandards.calculateNdLongExposures(_shutterSpeed.value)
+    }
+
+    fun getMotionBlurEffect(): com.example.data.model.MotionBlurEffect {
+        return ExposureStandards.calculateMotionBlurEffect(_shutterSpeed.value)
+    }
+
+    fun applyDynamicFillRatio(targetSourceRatio: Float) {
+        val keyLight = _portraitCalculation.value.keyLight
+        val (baseAp, tenths) = com.example.data.model.DynamicLightingPhysics.solveFillAperture(
+            keyEffectiveFStop = keyLight.effectiveFStop,
+            targetSourceRatio = targetSourceRatio
+        )
+        updatePortraitLightReading(com.example.data.model.LightRole.FILL, baseAp, tenths)
+        Toast.makeText(getApplication(), "Dynamic Fill set to f/$baseAp.$tenths for ${targetSourceRatio.toInt()}:1 ratio", Toast.LENGTH_SHORT).show()
     }
 
     // Presets

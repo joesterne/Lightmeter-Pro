@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,6 +79,7 @@ fun QuickAccessBar(
     onToggleBatterySaver: () -> Unit,
     syncState: SyncState,
     onTriggerSync: () -> Unit,
+    onOpenColorPicker: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var isExpanded by remember { mutableStateOf(false) }
@@ -158,6 +160,24 @@ fun QuickAccessBar(
                         imageVector = Icons.Default.BatterySaver,
                         contentDescription = "Battery Saver",
                         tint = if (isBatterySaver) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+
+                // Palette / App Colors Button
+                Box(
+                    modifier = Modifier
+                        .testTag("quick_color_picker")
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer)
+                        .clickable { onOpenColorPicker() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Palette,
+                        contentDescription = "App Colors",
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
                 }

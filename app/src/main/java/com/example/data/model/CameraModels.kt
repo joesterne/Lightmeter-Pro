@@ -163,4 +163,306 @@ object ExposureStandards {
         }
         return secondsToShutterSpeedString(baseSeconds)
     }
+
+    /**
+     * Dynamic Depth of Field (DoF), Hyperfocal Distance, and Diffraction limit
+     */
+    fun calculateDepthOfField(
+        focalLengthMm: Int,
+        aperture: Float,
+        subjectDistanceMeters: Float,
+        sensorFormat: SensorFormat
+    ): DepthOfFieldCalculation {
+        val cocMm = when (sensorFormat) {
+            SensorFormat.FULL_FRAME -> 0.030f
+            SensorFormat.APS_C_SONY_NIKON -> 0.020f
+            SensorFormat.APS_C_CANON -> 0.019f
+            SensorFormat.MICRO_FOUR_THIRDS -> 0.015f
+            SensorFormat.MEDIUM_FORMAT -> 0.040f
+        }
+        val fM = (focalLengthMm.coerceAtLeast(10)) / 1000.0
+        val cM = cocMm / 1000.0
+        val sM = subjectDistanceMeters.coerceAtLeast(0.1f).toDouble()
+        val n = aperture.coerceAtLeast(0.7f).toDouble()
+
+        // Hyperfocal distance H = f^2 / (N * c) + f
+        val hyperfocalM = ((fM * fM) / (n * cM)) + fM
+
+        val nearLimitM: Double
+        val farLimitM: Double
+        val isInfiniteFar: Boolean
+
+        if (sM >= hyperfocalM) {
+            nearLimitM = (hyperfocalM * sM) / (hyperfocalM + (sM - fM))
+            farLimitM = Double.POSITIVE_INFINITY
+            isInfiniteFar = true
+        } else {
+            val denomNear = hyperfocalM + (sM - fM)
+            val denomFar = hyperfocalM - (sM - fM)
+            nearLimitM = if (denomNear > 0) (hyperfocalM * sM) / denomNear else sM * 0.5
+            if (denomFar <= 0.001) {
+                farLimitM = Double.POSITIVE_INFINITY
+                isInfiniteFar = true
+            } else {
+                farLimitM = (hyperfocalM * sM) / denomFar
+                isInfiniteFar = false
+            }
+        }
+
+        val totalDofM = if (isInfiniteFar) Double.POSITIVE_INFINITY else (farLimitM - nearLimitM).coerceAtLeast(0.0)
+
+        // Distribution
+        val frontDof = (sM - nearLimitM).coerceAtLeast(0.0)
+        val rearDof = if (isInfiniteFar) Double.POSITIVE_INFINITY else (farLimitM - sM).coerceAtLeast(0.0)
+        val frontPercent = if (totalDofM.isInfinite() || totalDofM <= 0.001) 33f else ((frontDof / totalDofM) * 100f).toFloat().coerceIn(0f, 100f)
+        val rearPercent = if (totalDofM.isInfinite()) 100f - frontPercent else ((rearDof / totalDofM) * 100f).toFloat().coerceIn(0f, 100f)
+
+        // Airy disk diameter = 2.44 * lambda * N (microns), lambda ~ 0.55 um
+        val airyDiskMicrons = (1.342 * n).toFloat()
+        val diffractionThreshold = when (sensorFormat) {
+            SensorFormat.MICRO_FOUR_THIRDS -> 8.0f
+            SensorFormat.APS_C_CANON, SensorFormat.APS_C_SONY_NIKON -> 11.0f
+            SensorFormat.FULL_FRAME -> 16.0f
+            SensorFormat.MEDIUM_FORMAT -> 22.0f
+        }
+        val isDiffractionLimited = aperture >= diffractionThreshold
+
+        return DepthOfFieldCalculation(
+            focalLengthMm = focalLengthMm,
+            aperture = aperture,
+            subjectDistanceMeters = subjectDistanceMeters,
+            sensorFormat = sensorFormat,
+            circleOfConfusionMm = cocMm,
+            hyperfocalMeters = hyperfocalM.toFloat(),
+            nearLimitMeters = nearLimitM.toFloat(),
+            farLimitMeters = if (isInfiniteFar) Float.POSITIVE_INFINITY else farLimitM.toFloat(),
+            totalDofMeters = if (isInfiniteFar) Float.POSITIVE_INFINITY else totalDofM.toFloat(),
+            isFarLimitInfinite = isInfiniteFar,
+            frontPercent = frontPercent,
+            rearPercent = rearPercent,
+            airyDiskMicrons = airyDiskMicrons,
+            isDiffractionLimited = isDiffractionLimited
+        )
+    }
+
+    /**
+     * Dynamic Exposure Balance (EV Delta) between current settings and scene EV.
+     * Tells whether the camera is underexposed, perfectly centered, or overexposed.
+     */
+    fun calculateExposureBalance(
+        sceneEv100: Float,
+        shutterSpeed: String,
+        aperture: Float,
+        iso: Int,
+        ndStops: Int = 0
+    ): ExposureBalanceCalculation {
+        val seconds = shutterSpeedStringToSeconds(shutterSpeed)
+        val nSquared = aperture.toDouble().pow(2)
+        val evFromTriangle = log2(nSquared / seconds.coerceAtLeast(0.00001)).toFloat()
+        val isoCompensation = log2((iso.toFloat() / 100f).coerceAtLeast(0.01f))
+        val currentSettingsEv100 = evFromTriangle - isoCompensation + ndStops
+
+        // Delta EV: settings vs scene.
+        // If settings have higher EV requirement than scene produces => underexposed (negative)
+        // If settings have lower EV requirement than scene produces => overexposed (positive)
+        val deltaEv = sceneEv100 - currentSettingsEv100
+
+        val zoneName = when {
+            deltaEv <= -3.5f -> "Zone 0 / I: Pure Solid Black (No Texture)"
+            deltaEv in -3.5f..-2.5f -> "Zone II: Deep Shadows (Threshold of Texture)"
+            deltaEv in -2.5f..-1.5f -> "Zone III: Textured Dark Shadows (Dark Fabrics/Foliage)"
+            deltaEv in -1.5f..-0.5f -> "Zone IV: Dark Tones (Dark Foliage / Deep Skin)"
+            deltaEv in -0.5f..0.5f -> "Zone V: 18% Middle Gray (Standard Neutral Balance)"
+            deltaEv in 0.5f..1.5f -> "Zone VI: Average Light Skin Tones / Light Stonework"
+            deltaEv in 1.5f..2.5f -> "Zone VII: Textured Highlights (Light Concrete / Sand)"
+            deltaEv in 2.5f..3.5f -> "Zone VIII: Subtle Highlight Texture (White Paper/Snow)"
+            else -> "Zone IX / X: Specular Highlights / Pure Blown White"
+        }
+
+        val statusText = when {
+            kotlin.math.abs(deltaEv) <= 0.2f -> "0.0 EV Balanced (18% Gray)"
+            deltaEv > 0 -> "+${String.format(java.util.Locale.US, "%.1f", deltaEv)} EV Overexposed"
+            else -> "${String.format(java.util.Locale.US, "%.1f", deltaEv)} EV Underexposed"
+        }
+
+        return ExposureBalanceCalculation(
+            sceneEv100 = sceneEv100,
+            settingsEv100 = currentSettingsEv100,
+            deltaEv = deltaEv,
+            zoneSystemName = zoneName,
+            statusText = statusText,
+            isBalanced = kotlin.math.abs(deltaEv) <= 0.3f
+        )
+    }
+
+    /**
+     * Dynamic Astrophotography Shutter Speed (500 Rule & NPF Rule)
+     */
+    fun calculateAstroStarTrailing(
+        focalLengthMm: Int,
+        aperture: Float,
+        sensorFormat: SensorFormat
+    ): AstroStarTrailCalculation {
+        val effFocal = (focalLengthMm * sensorFormat.cropFactor).coerceAtLeast(10f)
+        val rule500Sec = 500.0 / effFocal.toDouble()
+
+        // NPF rule formula: (35 * N + 30 * pixelPitch) / effFocal
+        // Typical modern mirrorless pixel pitch ~ 4.0 microns
+        val pixelPitchMicrons = 4.0
+        val npfSec = ((35.0 * aperture.toDouble()) + (30.0 * pixelPitchMicrons)) / effFocal.toDouble()
+
+        return AstroStarTrailCalculation(
+            focalLengthMm = focalLengthMm,
+            aperture = aperture,
+            sensorFormat = sensorFormat,
+            rule500Seconds = rule500Sec,
+            npfRuleSeconds = npfSec,
+            rule500Display = formatAstroSeconds(rule500Sec),
+            npfRuleDisplay = formatAstroSeconds(npfSec)
+        )
+    }
+
+    private fun formatAstroSeconds(sec: Double): String {
+        return if (sec >= 1.0) {
+            "${String.format(java.util.Locale.US, "%.1f", sec)}s"
+        } else {
+            val rec = (1.0 / sec).roundToInt()
+            "1/${rec}s"
+        }
+    }
+
+    /**
+     * Dynamic ND Filter Exposure Multiplier Table
+     */
+    fun calculateNdLongExposures(baseShutterSpeed: String): List<NdLongExposureOption> {
+        val baseSec = shutterSpeedStringToSeconds(baseShutterSpeed)
+        val filters = listOf(
+            Triple(1, "ND2 (+1 Stop)", 1),
+            Triple(3, "ND8 (+3 Stops)", 3),
+            Triple(6, "ND64 (+6 Stops)", 6),
+            Triple(10, "ND1000 (+10 Stops)", 10),
+            Triple(15, "ND32000 (+15 Stops)", 15)
+        )
+        return filters.map { (stops, name, _) ->
+            val extendedSec = baseSec * 2.0.pow(stops.toDouble())
+            val display = if (extendedSec >= 1.0) {
+                "${(extendedSec * 10).roundToInt() / 10f}s"
+            } else {
+                secondsToShutterSpeedString(extendedSec)
+            }
+            NdLongExposureOption(
+                stops = stops,
+                name = name,
+                resultingSeconds = extendedSec,
+                displayString = display,
+                isBulbRequired = extendedSec >= 30.0
+            )
+        }
+    }
+
+    /**
+     * Dynamic Motion Kinetic Interpretation
+     */
+    fun calculateMotionBlurEffect(shutterSpeed: String): MotionBlurEffect {
+        val sec = shutterSpeedStringToSeconds(shutterSpeed)
+        return when {
+            sec <= 1.0 / 4000.0 -> MotionBlurEffect(
+                description = "Ultra High-Speed: Freezes water drops, insect wings, explosive splashes.",
+                badgeText = "Freeze Extreme Action",
+                safety = "Tripod not required; safe handheld."
+            )
+            sec <= 1.0 / 1000.0 -> MotionBlurEffect(
+                description = "Action & Sports: Freezes athletes, running children, moving pets, vehicles.",
+                badgeText = "Freeze Sports & Wildlife",
+                safety = "Safe handheld."
+            )
+            sec <= 1.0 / 250.0 -> MotionBlurEffect(
+                description = "Sharp Portraiture: Freezes human blinking, gestures, gentle wind on clothes.",
+                badgeText = "Standard Sharp Portrait",
+                safety = "Safe handheld with standard lenses."
+            )
+            sec <= 1.0 / 60.0 -> MotionBlurEffect(
+                description = "Moderate Handheld: Fine for static subjects; moving limbs may exhibit motion trail.",
+                badgeText = "Casual Static Scene",
+                safety = "Watch for camera shake with telephoto lenses."
+            )
+            sec <= 1.0 / 8.0 -> MotionBlurEffect(
+                description = "Intentional Motion Blur: Panning vehicle shots, moving crowd blur, textural waves.",
+                badgeText = "Creative Panning / Motion",
+                safety = "Requires IBIS, OIS, or solid brace/monopod."
+            )
+            sec < 2.0 -> MotionBlurEffect(
+                description = "Silky Water & Streaks: Cascading waterfalls become misty; headlights streak.",
+                badgeText = "Misty Waterfalls / Night Streaks",
+                safety = "Tripod mandatory to prevent camera shake."
+            )
+            else -> MotionBlurEffect(
+                description = "Deep Long Exposure / Astrophotography: Glassy mirror seas, celestial star fields, architectural ghosting.",
+                badgeText = "Bulb / Long Exposure",
+                safety = "Solid tripod + remote shutter release recommended."
+            )
+        }
+    }
 }
+
+data class DepthOfFieldCalculation(
+    val focalLengthMm: Int,
+    val aperture: Float,
+    val subjectDistanceMeters: Float,
+    val sensorFormat: SensorFormat,
+    val circleOfConfusionMm: Float,
+    val hyperfocalMeters: Float,
+    val nearLimitMeters: Float,
+    val farLimitMeters: Float,
+    val totalDofMeters: Float,
+    val isFarLimitInfinite: Boolean,
+    val frontPercent: Float,
+    val rearPercent: Float,
+    val airyDiskMicrons: Float,
+    val isDiffractionLimited: Boolean
+) {
+    val hyperfocalDisplay: String
+        get() = "${String.format(java.util.Locale.US, "%.2f", hyperfocalMeters)}m"
+
+    val nearLimitDisplay: String
+        get() = "${String.format(java.util.Locale.US, "%.2f", nearLimitMeters)}m"
+
+    val farLimitDisplay: String
+        get() = if (isFarLimitInfinite) "Infinity (∞)" else "${String.format(java.util.Locale.US, "%.2f", farLimitMeters)}m"
+
+    val totalDofDisplay: String
+        get() = if (isFarLimitInfinite) "Infinite (∞)" else if (totalDofMeters < 1.0f) "${(totalDofMeters * 100).roundToInt()} cm" else "${String.format(java.util.Locale.US, "%.2f", totalDofMeters)}m"
+}
+
+data class ExposureBalanceCalculation(
+    val sceneEv100: Float,
+    val settingsEv100: Float,
+    val deltaEv: Float,
+    val zoneSystemName: String,
+    val statusText: String,
+    val isBalanced: Boolean
+)
+
+data class AstroStarTrailCalculation(
+    val focalLengthMm: Int,
+    val aperture: Float,
+    val sensorFormat: SensorFormat,
+    val rule500Seconds: Double,
+    val npfRuleSeconds: Double,
+    val rule500Display: String,
+    val npfRuleDisplay: String
+)
+
+data class NdLongExposureOption(
+    val stops: Int,
+    val name: String,
+    val resultingSeconds: Double,
+    val displayString: String,
+    val isBulbRequired: Boolean
+)
+
+data class MotionBlurEffect(
+    val description: String,
+    val badgeText: String,
+    val safety: String
+)

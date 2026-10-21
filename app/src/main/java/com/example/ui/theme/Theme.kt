@@ -1,26 +1,30 @@
 package com.example.ui.theme
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val ProDarkColorScheme = darkColorScheme(
-    primary = MeterAmber,
-    onPrimary = Color(0xFF1E1705),
-    primaryContainer = MeterAmberContainer,
-    onPrimaryContainer = MeterAmberLight,
-    secondary = MeterCyan,
+private fun createCustomColorScheme(
+    accent: AppAccentColor,
+    vibe: AppBackgroundVibe
+): ColorScheme = darkColorScheme(
+    primary = accent.primary,
+    onPrimary = if (accent == AppAccentColor.TITANIUM_SILVER) Color(0xFF0F172A) else Color(0xFF0A0E17),
+    primaryContainer = accent.container,
+    onPrimaryContainer = accent.light,
+    secondary = accent.secondary,
     onSecondary = Color(0xFF03283E),
-    tertiary = MeterGreen,
+    tertiary = accent.tertiary,
     onTertiary = Color(0xFF062B1C),
-    background = ProDarkBackground,
+    background = vibe.background,
     onBackground = ProDarkTextPrimary,
-    surface = ProDarkSurface,
+    surface = vibe.surface,
     onSurface = ProDarkTextPrimary,
-    surfaceVariant = ProDarkSurfaceVariant,
+    surfaceVariant = vibe.surfaceVariant,
     onSurfaceVariant = ProDarkTextSecondary,
-    outline = ProDarkBorder,
+    outline = vibe.border,
     error = MeterRed,
     onError = Color.White
 )
@@ -67,6 +71,8 @@ private val BatterySaverColorScheme = darkColorScheme(
 
 @Composable
 fun LightmeterProTheme(
+    accentColor: AppAccentColor = AppAccentColor.STUDIO_AMBER,
+    backgroundVibe: AppBackgroundVibe = AppBackgroundVibe.OBSIDIAN_SLATE,
     isRedNightMode: Boolean = false,
     isBatterySaverMode: Boolean = false,
     content: @Composable () -> Unit
@@ -74,7 +80,7 @@ fun LightmeterProTheme(
     val colorScheme = when {
         isRedNightMode -> AstroRedColorScheme
         isBatterySaverMode -> BatterySaverColorScheme
-        else -> ProDarkColorScheme
+        else -> createCustomColorScheme(accentColor, backgroundVibe)
     }
 
     MaterialTheme(
