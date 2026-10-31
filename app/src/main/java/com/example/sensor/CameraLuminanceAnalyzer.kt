@@ -21,10 +21,16 @@ data class CameraLuminanceData(
         if (this === other) return true
         if (javaClass != other?.javaClass) return false
         other as CameraLuminanceData
+        // estimatedLux and both clipping ratios were omitted, so StateFlow
+        // conflated (suppressed) emissions that differed only in those
+        // fields and collectors never saw updated clipping ratios.
         return histogramBins.contentEquals(other.histogramBins) &&
                 averageLuminance == other.averageLuminance &&
                 centerSpotLuminance == other.centerSpotLuminance &&
-                estimatedEv100 == other.estimatedEv100
+                estimatedEv100 == other.estimatedEv100 &&
+                estimatedLux == other.estimatedLux &&
+                shadowClippingRatio == other.shadowClippingRatio &&
+                highlightClippingRatio == other.highlightClippingRatio
     }
 
     override fun hashCode(): Int {
@@ -32,6 +38,9 @@ data class CameraLuminanceData(
         result = 31 * result + averageLuminance.hashCode()
         result = 31 * result + centerSpotLuminance.hashCode()
         result = 31 * result + estimatedEv100.hashCode()
+        result = 31 * result + estimatedLux.hashCode()
+        result = 31 * result + shadowClippingRatio.hashCode()
+        result = 31 * result + highlightClippingRatio.hashCode()
         return result
     }
 }

@@ -188,6 +188,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         super.onCleared()
         lightSensorManager.stopListening()
+        shutterManager.close()
     }
 
     fun toggleRedNightMode() {
@@ -255,7 +256,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setFocalLength(mm: Int) {
         val lens = _selectedLens.value
-        _focalLengthMm.value = mm.coerceIn(lens.minFocalLength, lens.maxFocalLength)
+        // coerceIn throws when min > max; a lens saved with an inverted
+        // range used to crash the app on the first slider move.
+        val lo = minOf(lens.minFocalLength, lens.maxFocalLength)
+        val hi = maxOf(lens.minFocalLength, lens.maxFocalLength)
+        _focalLengthMm.value = mm.coerceIn(lo, hi)
     }
 
     fun setPriority(p: ExposurePriority) {
@@ -278,9 +283,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stepAperture(closeDown: Boolean) {
         val apertures = ExposureStandards.STANDARD_APERTURES
+        // Step only within the mounted lens's range: this used to walk the
+        // full f/1.0-f/32 list, so the meter could be set to f/1.0 on an
+        // f/2.8 lens. (Aperture numbers: maxAperture is the widest/smallest
+        // f-number, minAperture the narrowest/largest.)
+        val lens = _selectedLens.value
+        val firstAllowed = apertures.indexOfFirst { it >= lens.maxAperture - 0.05f }.let { if (it == -1) 0 else it }
+        val lastAllowed = apertures.indexOfLast { it <= lens.minAperture + 0.05f }.let { if (it == -1) apertures.size - 1 else it }
         val currentIndex = apertures.indexOfFirst { kotlin.math.abs(it - _aperture.value) < 0.1f }
             .let { if (it == -1) 5 else it }
-        val nextIndex = if (closeDown) (currentIndex + 1).coerceAtMost(apertures.size - 1) else (currentIndex - 1).coerceAtLeast(0)
+            .coerceIn(firstAllowed, lastAllowed)
+        val nextIndex = if (closeDown) (currentIndex + 1).coerceAtMost(lastAllowed) else (currentIndex - 1).coerceAtLeast(firstAllowed)
         _aperture.value = apertures[nextIndex]
         recalculateExposure()
     }
@@ -302,6 +315,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _isMeteringLive.value = enabled
         if (enabled) {
             lightSensorManager.startListening()
+        } else {
+            // Was missing: the listener kept running, so the next hardware
+            // sensor events overwrote any "locked"/manual EV (see
+            // applyCameraSpotReading / setManualEv) within a few samples.
+            lightSensorManager.stopListening()
         }
     }
 
@@ -311,6 +329,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun applyCameraSpotReading(ev: Float, lux: Float) {
         _isMeteringLive.value = false
+        lightSensorManager.stopListening()
         lightSensorManager.setManualEv100(ev)
         recalculateExposure(ev)
         Toast.makeText(getApplication(), "Locked Spot Exposure: EV ${String.format(java.util.Locale.US, "%.1f", ev)}", Toast.LENGTH_SHORT).show()
@@ -318,6 +337,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setManualEv(ev: Float) {
         _isMeteringLive.value = false
+        lightSensorManager.stopListening()
         lightSensorManager.setManualEv100(ev)
         recalculateExposure(ev)
     }
@@ -344,7 +364,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     ndStops = nd
                 )
                 if (kotlin.math.abs(_aperture.value - newAperture) > 0.05f) {
-                    _aperture.value = newAperture
+                    // Clamp the computed aperture to the mounted lens's range.
+                    val lens = _selectedLens.value
+                    val lo = minOf(lens.maxAperture, lens.minAperture)
+                    val hi = maxOf(lens.maxAperture, lens.minAperture)
+                    _aperture.value = newAperture.coerceIn(lo, hi)
                 }
             }
             ExposurePriority.ISO_PRIORITY -> {
@@ -434,14 +458,45 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Presets
     fun applyPreset(preset: PresetEntity) {
+        // Clamp to the mounted lens: a preset recorded on another lens could
+        // otherwise leave the meter in a state this lens cannot produce
+        // (e.g. an 85mm preset focal on a 24-70mm zoom).
+        val lens = _selectedLens.value
+        val loFocal = minOf(lens.minFocalLength, lens.maxFocalLength)
+        val hiFocal = maxOf(lens.minFocalLength, lens.maxFocalLength)
+        val loAp = minOf(lens.maxAperture, lens.minAperture)
+        val hiAp = maxOf(lens.maxAperture, lens.minAperture)
         _iso.value = preset.iso
-        _aperture.value = preset.aperture
+        _aperture.value = preset.aperture.coerceIn(loAp, hiAp)
         _shutterSpeed.value = preset.shutterSpeed
-        _focalLengthMm.value = preset.focalLengthMm
+        _focalLengthMm.value = preset.focalLengthMm.coerceIn(loFocal, hiFocal)
         _ndFilterStops.value = preset.ndFilterStops
         _priority.value = ExposurePriority.MANUAL_LOCK
         lightSensorManager.setManualEv100(preset.targetEv100)
         Toast.makeText(getApplication(), "Applied Preset: ${preset.name}", Toast.LENGTH_SHORT).show()
+    }
+
+    // The Create Preset dialog collects Shutter/Aperture/ISO/Focal and used
+    // to throw them away, calling saveCurrentAsPreset (a snapshot of the
+    // live meter) instead. This saves what the user actually typed.
+    fun saveCustomPreset(name: String, category: String, description: String, shutter: String, aperture: Float, iso: Int, focal: Int) {
+        viewModelScope.launch {
+            val preset = PresetEntity(
+                name = name,
+                category = category,
+                environmentDescription = description,
+                targetEv100 = lightSensorManager.ev100.value,
+                iso = iso,
+                shutterSpeed = shutter,
+                aperture = aperture,
+                focalLengthMm = focal,
+                ndFilterStops = _ndFilterStops.value,
+                lightingRatioNotes = "Custom values entered in the Create Preset dialog",
+                isCustom = true
+            )
+            repository.savePreset(preset)
+            Toast.makeText(getApplication(), "Created Preset: $name", Toast.LENGTH_SHORT).show()
+        }
     }
 
     fun saveCurrentAsPreset(name: String, category: String, description: String) {
@@ -567,11 +622,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         notes: String
     ) {
         viewModelScope.launch {
+            // Normalize an inverted focal range instead of persisting a lens
+            // that crashes setFocalLength's coerceIn when mounted.
+            val loFocal = minOf(minFocal, maxFocal)
+            val hiFocal = maxOf(minFocal, maxFocal)
             val lens = com.example.data.local.LensEntity(
                 brand = brand,
                 lensName = lensName,
-                minFocalLength = minFocal,
-                maxFocalLength = maxFocal,
+                minFocalLength = loFocal,
+                maxFocalLength = hiFocal,
                 maxAperture = maxAperture,
                 minAperture = minAperture,
                 hasOis = hasOis,
@@ -693,12 +752,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         Toast.makeText(getApplication(), "Set Camera Lens to Calculated f/$workingF", Toast.LENGTH_SHORT).show()
     }
 
-    // Cloud Sync
+    // There is NO cloud backend in this build: the old triggerCloudSync
+    // only delayed 1.2s, marked every log synced, and this toast announced
+    // "Metadata and gear synced to cloud" for an upload that never
+    // happened. Sync is local-only until a real backend exists.
     fun triggerSync() {
-        viewModelScope.launch {
-            repository.triggerCloudSync()
-            Toast.makeText(getApplication(), "Metadata and gear synced to cloud", Toast.LENGTH_SHORT).show()
-        }
+        Toast.makeText(getApplication(), "Cloud sync isn't available in this build — everything is stored on this device.", Toast.LENGTH_LONG).show()
     }
 
     // Export Settings Card
@@ -798,9 +857,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 updated.add(ChatMessage(role = "model", text = reply))
                 _chatMessages.value = updated
             }.onFailure { err ->
-                val updated = _chatMessages.value.toMutableList()
-                updated.add(ChatMessage(role = "model", text = "Error: ${err.message}"))
-                _chatMessages.value = updated
+                // Was: the error was appended as a MODEL message and then
+                // resent verbatim as conversation history on every later
+                // send, polluting the API context. Failures are transient
+                // UI feedback now and never enter the history.
+                Toast.makeText(getApplication(), "AI reply failed: ${err.message}", Toast.LENGTH_SHORT).show()
             }
         }
     }

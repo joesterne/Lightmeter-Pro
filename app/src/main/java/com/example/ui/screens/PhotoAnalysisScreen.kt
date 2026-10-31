@@ -211,7 +211,10 @@ fun PhotoAnalysisScreen(
                 shape = RoundedCornerShape(10.dp)
             )
 
-            // Histogram for the image
+            // NOTE: this histogram is NOT computed from the uploaded photo —
+            // it renders the ambient light sensor's EV (synthetic bins), so
+            // it is labeled as such instead of "for the image".
+            Text("Ambient light histogram (from the light sensor, not this photo)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             HistogramView(
                 ev100 = ev100,
                 targetEv = 12f

@@ -56,6 +56,9 @@ interface LensDao {
 
 @Dao
 interface GearDao {
+    @Query("SELECT COUNT(*) FROM gear_inventory")
+    suspend fun getCount(): Int
+
     @Query("SELECT * FROM gear_inventory ORDER BY category ASC, brand ASC, name ASC")
     fun getAllGear(): Flow<List<GearEntity>>
 
@@ -101,8 +104,6 @@ interface ExposureLogDao {
     @Delete
     suspend fun deleteLog(log: ExposureLogEntity)
 
-    @Query("UPDATE exposure_logs SET isSyncedToCloud = 1")
-    suspend fun markAllSynced()
 }
 
 @Database(

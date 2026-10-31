@@ -195,7 +195,10 @@ fun PresetsScreen(
                             val ap = apertureText.toFloatOrNull() ?: 2.8f
                             val iso = isoText.toIntOrNull() ?: 100
                             val focal = focalText.toIntOrNull() ?: 50
-                            viewModel.saveCurrentAsPreset(name, category, description)
+                            // These parsed values used to be silently
+                            // discarded — the call saved a snapshot of the
+                            // live meter instead of what was typed.
+                            viewModel.saveCustomPreset(name, category, description, shutter, ap, iso, focal)
                             showCreateDialog = false
                             name = ""
                             description = ""

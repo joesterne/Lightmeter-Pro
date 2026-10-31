@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 data class BluetoothCameraDevice(
@@ -21,6 +22,13 @@ data class BluetoothCameraDevice(
     val isConnected: Boolean = false
 )
 
+// SIMULATION ONLY: there is no Bluetooth code in this class (no
+// BluetoothAdapter/LE scanner/GATT anywhere in the app). The device list is
+// hardcoded samples, "connecting" only flips state, and the shutter / timer
+// / bulb / intervalometer actions vibrate the phone — nothing is ever sent
+// to a camera. The UI labels it as a simulation; a real implementation
+// needs BluetoothLeScanner + a GATT shutter characteristic and the
+// BLUETOOTH_SCAN/CONNECT runtime permissions.
 class BluetoothShutterManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main)
 
@@ -51,6 +59,16 @@ class BluetoothShutterManager(private val context: Context) {
     private var bulbJob: Job? = null
     private var countdownJob: Job? = null
     private var intervalJob: Job? = null
+
+    // Cancels the manager's scope and any running timer jobs. Called from
+    // MainViewModel.onCleared — without it, countdown/bulb/intervalometer
+    // jobs kept vibrating and mutating state after the ViewModel died.
+    fun close() {
+        countdownJob?.cancel()
+        bulbJob?.cancel()
+        intervalJob?.cancel()
+        scope.cancel()
+    }
 
     init {
         // Sample standard camera remotes

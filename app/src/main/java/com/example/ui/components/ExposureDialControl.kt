@@ -122,7 +122,10 @@ fun ExposureDialControl(
             ParameterCard(
                 label = "ISO SENSITIVITY",
                 value = "$iso",
-                isPriorityLocked = priority == ExposurePriority.ISO_PRIORITY,
+                // ISO is the CALCULATED value in ISO_PRIORITY mode, never
+                // the user-locked one — it was flagged as both, rendering
+                // with the lock icon and locked styling.
+                isPriorityLocked = false,
                 isCalculated = priority == ExposurePriority.ISO_PRIORITY,
                 onDecrease = { onIsoStep(false) },
                 onIncrease = { onIsoStep(true) },

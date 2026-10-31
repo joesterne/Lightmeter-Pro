@@ -792,6 +792,12 @@ private fun AddCameraBodyDialog(
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
+                        value = maxIsoText,
+                        onValueChange = { maxIsoText = it },
+                        label = { Text("Max ISO") },
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
                         value = maxShutter,
                         onValueChange = { maxShutter = it },
                         label = { Text("Max Shutter") },

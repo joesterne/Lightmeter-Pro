@@ -20,8 +20,7 @@ import kotlinx.coroutines.launch
 
 enum class SyncState {
     SYNCED,
-    SYNCING,
-    OFFLINE_ONLY
+    SYNCING
 }
 
 class LightmeterRepository(private val context: Context) {
@@ -71,6 +70,10 @@ class LightmeterRepository(private val context: Context) {
             }
             if (presetDao.getCount() == 0) {
                 DefaultData.INITIAL_PRESETS.forEach { presetDao.insertPreset(it) }
+            }
+            // Gear seeding was nested inside the preset check, so an empty
+            // gear table was never seeded once presets existed.
+            if (gearDao.getCount() == 0) {
                 DefaultData.INITIAL_GEAR.forEach { gearDao.insertGear(it) }
             }
         }
@@ -108,18 +111,11 @@ class LightmeterRepository(private val context: Context) {
     suspend fun saveExposureLog(log: ExposureLogEntity) = logDao.insertLog(log)
     suspend fun deleteExposureLog(log: ExposureLogEntity) = logDao.deleteLog(log)
 
-    // Cloud Sync
-    suspend fun triggerCloudSync() {
-        _syncState.value = SyncState.SYNCING
-        kotlinx.coroutines.delay(1200) // Simulated robust background cloud sync
-        logDao.markAllSynced()
-        _lastSyncTimestamp.value = System.currentTimeMillis()
-        _syncState.value = SyncState.SYNCED
-    }
-
-    fun setOfflineMode(isOffline: Boolean) {
-        _syncState.value = if (isOffline) SyncState.OFFLINE_ONLY else SyncState.SYNCED
-    }
+    // Cloud sync: there is no backend in this build. A simulated
+    // triggerCloudSync used to delay 1.2s, call logDao.markAllSynced(),
+    // and report success for an upload that never happened — it is gone,
+    // along with setOfflineMode / SyncState.OFFLINE_ONLY, which had no
+    // callers. _syncState stays SYNCED (local data is always saved).
 
     // Camera and Lens catalog
     fun getBrands(): List<String> = DefaultData.BRANDS

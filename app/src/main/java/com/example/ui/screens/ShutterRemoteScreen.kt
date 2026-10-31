@@ -110,7 +110,7 @@ fun ShutterRemoteScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (connectedDevice != null) "Connected • Ready to Trigger" else "Pair camera or wireless shutter remote",
+                            text = if (connectedDevice != null) "Simulated connection (demo)" else "Demo simulation — no real Bluetooth pairing",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -368,6 +368,16 @@ fun ShutterRemoteScreen(
                     value = intervalShots.toFloat(),
                     onValueChange = { intervalShots = it.toInt() },
                     valueRange = 10f..200f,
+                    colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.secondary)
+                )
+
+                // The interval was display-only: intervalSeconds was shown
+                // and passed to startIntervalometer, but no control ever
+                // wrote it — it could never be changed from 5s.
+                Slider(
+                    value = intervalSeconds.toFloat(),
+                    onValueChange = { intervalSeconds = it.toInt() },
+                    valueRange = 1f..60f,
                     colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.secondary)
                 )
 

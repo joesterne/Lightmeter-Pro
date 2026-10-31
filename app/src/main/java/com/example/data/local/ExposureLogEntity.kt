@@ -19,5 +19,5 @@ data class ExposureLogEntity(
     val lensName: String,
     val focalLengthMm: Int,
     val lightingSetupNotes: String = "",
-    val isSyncedToCloud: Boolean = true
+    val isSyncedToCloud: Boolean = false
 )
